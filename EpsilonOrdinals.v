@@ -25,14 +25,16 @@ End chain.
 Arguments chain {A} f start n.
 
 Inductive LT : forall (n m : ord), Prop :=
-| succLE : forall r f, r < (f $ r)
-| succTransLE : forall q r f : ord, q < r -> q < (f $ r)
-| limitLE : forall g f r : ord, f < g -> forall n, (chain (fun o => f $ o) r n) < (g $ r)
+| succLT : forall r f, r < (f $ r)
+| succTransLT : forall q r f : ord, q < r -> q < (f $ r)
+| limitLT : forall g f r : ord, f < g -> forall n, (chain (fun o => f $ o) r n) < (g $ r)
 where "a < b" := (LT a b).
 
-Arguments succLE {r} {f}.
-Arguments succTransLE {q} {r} {f} p.
-Arguments limitLE {g} {f} {r} p {n}.
+Notation "a <= b" := (a = b \/ LT a b).
+
+Arguments succLT {r} {f}.
+Arguments succTransLT {q} {r} {f} p.
+Arguments limitLT {g} {f} {r} p {n}.
 
 Notation "\$ f" := (fun o => f $ o) (at level 50).
 
@@ -128,16 +130,96 @@ Qed.
 
 End chain_f_inj. 
 
+
+Section ind.
+
+  Lemma Z_le : forall r, 0 <= r.
+    induction r.
+    left; reflexivity.
+    right; destruct IHr1.
+    rewrite <- H; apply succLT.
+    apply succTransLT; assumption.
+  Qed.
+  
+  Lemma rising : forall f g, f < (f $ g).
+  Proof.
+    induction f; intro g.
+    assert (0 <= (0 $ g)) by apply Z_le.
+    destruct H;
+      [ contradict H; discriminate
+      | assumption
+      ].
+    assert(H : chain (\$ f) 
+  Qed.
+
+  Lemma no_smaller_step : forall r m, m < (0 $ r) <-> m <= r.
+  Proof.
+    intros.
+    split; intro H.
+
+    inversion_clear H.
+    left; auto.
+    right; auto.
+
+    inversion H0.
+
+    destruct H.
+    rewrite H; apply succLT.
+    
+    apply succTransLT; assumption.
+  Qed.
+
+  Require Import Coq.Setoids.Setoid. 
+  
+
+  Lemma chain_induction : forall f start (P : ord -> Prop),
+                            (forall r, r <= start -> P r)
+                            -> (forall x, (forall r, r < x -> P r) -> P x)
+                            -> forall n, (forall r, r <= (chain (\$ f) start n) -> P r).
+  Proof.
+    intros f start P H_start H_next.
+    induction f; induction n; simpl; try assumption.
+    intro.
+
+    assert (H_next_ : forall x, (forall r, r < x -> P r) -> (forall r, r <= x -> P r)) by
+        (clear n IHn r; intros x r_lt_x r r_le_x; destruct r_le_x; [rewrite H; apply H_next | apply r_lt_x]; assumption).
+
+    clear H_next.
+    apply H_next_.
+    clear r.
+    intros r r_lt_0Chain.
+    apply IHn.
+    
+    clear H0; apply H1; clear H1 r.
+    intros r r_lt_x.
+    apply IHn.
+    rewrite <- no_smaller_step.
+    assumption.
+
+    
+  Qed.
+  
+Let Ind x := forall P : ord -> Prop, (forall q, (forall r, r < q -> P r) -> P q) -> P x.
+  
 Theorem transfinite_induction :
   forall P,
-    (P 0) ->
     (forall q, (forall r, r < q -> P r) -> P q) ->
     forall q, P q.
 Proof.
+  assert (forall q,  Ind q).
+  unfold Ind; clear.  
   intros.
-  induction q.
+  apply H.
+  induction q; intros r H_lt; inversion H_lt.
+  rewrite H2 in H_lt; clear r H0 H2 f H3.
+  apply H.
   assumption.
-     
+  apply IHq1; assumption.
+  rewrite H0 in H1;  clear g H3 r0 H0.
+  rewrite <- H1 in H_lt; clear r H1.
+  induction n; simpl; simpl in H_lt.
+  clear f H2; apply H; apply IHq1.
+  
   Qed.
   
  
