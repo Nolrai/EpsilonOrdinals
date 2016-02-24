@@ -128,8 +128,45 @@ Proof.
  apply H.
 Qed.
 
-End chain_f_inj. 
+End chain_f_inj.
 
+Section Linear.
+
+Let nudge direction raw :=
+  match raw with
+  | Eq => direction
+  | _  => raw
+  end
+.
+
+Require Import Coq.Program.Wf.
+
+Program Fixpoint compOrd (q p : ord) {measure (r_hight q + r_hight p)} : comparison :=
+    match q, p with
+    | 0, 0 => Eq
+    | 0, _ => Lt
+    | _, 0 => Gt
+    | fq $ rq, fp $ rp =>
+      match compOrd fq fp with
+      | Eq => compOrd rq rp
+      | Lt => nudge Gt (compOrd rq p)
+      | Gt => nudge Lt (compOrd q rp)
+      end
+    end
+.
+
+Next Obligation.
+Proof.
+
+Qed.
+
+CompSpec 
+
+Theorem LinearOrder : forall r q, r < q \/ r = q \/ q < r. 
+Proof.
+Qed.
+
+End Linear.
 
 Section ind.
 
