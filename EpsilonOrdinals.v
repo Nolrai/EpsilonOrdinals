@@ -59,26 +59,8 @@ Fixpoint r_hight o : nat :=
   end
 .
 
-Lemma nat_plus_S n m : n + S m = S (n + m).
-Proof.
-  induction n.
-  simpl.
-  reflexivity.
-  simpl.
-  rewrite IHn.
-  auto.
-Qed.
-
-
-Lemma nat_plus_comm n m : n + m = m + n.
-Proof.
-  induction n.
-  induction m.
-  reflexivity.  
-  simpl; rewrite <- IHm; simpl; reflexivity.
-  rewrite nat_plus_S; simpl; rewrite IHn; reflexivity.
-Qed.
-
+Require Import Omega.
+Require Import Coq.Arith.Lt Coq.Arith.Plus Coq.Arith.Le.
 
 Section chain_f_inj.
 
@@ -94,8 +76,8 @@ Proof.
   exists n; left; induction n; simpl; try rewrite <- IHn; reflexivity.
   destruct IHm as [ k [ IH | IH ] ]; rewrite IH; clear IH; destruct k; simpl;
   try (exists 1; right; simpl; reflexivity).
-  exists k; left; rewrite nat_plus_S; reflexivity.
-  exists (2 + k); right; simpl; reflexivity.
+  exists k; left; omega.
+  exists (2 + k); right; omega.
 
   destruct H2 as [k H2]; destruct H2;
   [ (rewrite H2 in H1; apply H in H1; rewrite H1 in H2)
@@ -106,8 +88,6 @@ Qed.
   Variable f r : ord.
   Let F n := chain (\$ f) r n.
   Let P n m := F n = F m.
-
-  Require Import Coq.Arith.Lt.
 
 Theorem chain_f_inj : forall n m, P n m -> n = m.
 Proof.
@@ -132,7 +112,7 @@ End chain_f_inj.
 
 Section Linear.
 
-Let nudge direction raw :=
+Definition nudge direction raw :=
   match raw with
   | Eq => direction
   | _  => raw
@@ -141,7 +121,60 @@ Let nudge direction raw :=
 
 Require Import Coq.Program.Wf.
 
-Program Fixpoint compOrd (q p : ord) {measure (r_hight q + r_hight p)} : comparison :=
+Fixpoint hight o : nat :=
+  match o with
+  | 0 => 0%nat
+  | f $ r => S (max (hight f) (hight r))
+  end
+.
+
+Require Import Arith.Le Arith.Plus Arith.Lt.
+
+Lemma max_le_l : (forall n m, n <= max n m )%nat.
+Proof.
+induction n.
+apply le_0_n.
+destruct m; simpl; apply le_n_S; [apply le_refl | apply IHn].
+Qed.
+
+Lemma max_comm : (forall n m, max m n = max n m)%nat.
+Proof.
+induction n; destruct m; simpl; auto.
+Qed.
+
+Lemma max_le_r : forall n m, (m <= max n m)%nat.
+Proof.
+intros n m.
+rewrite max_comm.
+apply max_le_l.
+Qed.
+
+Lemma hight_lt_r : forall f r, (hight r < hight (f $ r))%nat.
+Proof.
+intros; simpl.
+assert (forall n m : nat, (n < S (max m n) )%nat).
+clear; intros.
+apply le_lt_n_Sm.
+apply max_le_r.
+apply H.
+Qed.
+
+Lemma hight_comm : forall p q, hight (p $ q) = hight (q $ p).
+simpl.
+intros.
+rewrite max_comm.
+reflexivity.
+Qed.
+
+Lemma hight_lt_f : forall f r, (hight f < hight (f $ r))%nat.
+Proof.
+intros.
+rewrite hight_comm.
+apply hight_lt_r.
+Qed.
+
+Program Fixpoint compOrd (q p : ord) {measure (hight q + hight p)} 
+ : {c : comparison | CompSpec eq LT q p c} :=
     match q, p with
     | 0, 0 => Eq
     | 0, _ => Lt
@@ -155,12 +188,106 @@ Program Fixpoint compOrd (q p : ord) {measure (r_hight q + r_hight p)} : compari
     end
 .
 
-Next Obligation.
+Lemma ord_lt_0_o : forall o, o <> 0 -> 0 < o.
 Proof.
-
+intros; induction o.
+destruct H; reflexivity.
+destruct o1.
+apply succLT.
+apply succTransLT.
+apply IHo1.
+discriminate.
 Qed.
 
-CompSpec 
+Next Obligation.
+Proof.
+unfold CompSpec; apply CompLt.
+apply ord_lt_0_o.
+destruct p.
+contradict H.
+split; auto.
+discriminate.
+Qed.
+
+Next Obligation.
+Proof.
+apply CompGt.
+apply ord_lt_0_o.
+contradict H0.
+split; auto.
+Qed.
+
+Next Obligation.
+Proof.
+clear.
+apply plus_lt_compat; apply hight_lt_f.
+Qed.
+
+Next Obligation.
+Proof.
+clear.
+apply plus_lt_compat; apply hight_lt_r.
+Qed.
+
+Next Obligation.
+Proof.
+assert (fq = fp).
+set (C :=
+    (compOrd fq fp
+      (compOrd_func_obligation_4 (fq $ rq) (fp $ rp) compOrd
+        _ _ _ _ eq_refl eq_refl
+      )
+    )
+  ).
+fold C in Heq_anonymous.
+induction C.
+destruct p; try assumption; simpl in Heq_anonymous; discriminate Heq_anonymous.
+set (obligation_5 := 
+  compOrd_func_obligation_5 
+    (fq $ rq) 
+    (fp $ rp) 
+    compOrd _ _ _ _ eq_refl eq_refl Heq_anonymous
+).
+set (C := compOrd rq rp obligation_5).
+rewrite <- H.
+induction C.
+clear obligation_5 Heq_anonymous.
+rewrite <- H in compOrd.
+clear fp H.
+induction p; constructor; try (rewrite H; reflexivity).
+apply succMonoLT.
+Qed.
+
+Next Obligation.
+Proof.
+clear.
+apply plus_le_lt_compat; [apply le_refl | apply hight_lt_r].
+Qed.
+
+Next Obligation.
+Proof.
+split; intros; clear; intro H; destruct H as [H _]; discriminate H.
+Qed.
+
+Next Obligation.
+Proof.
+apply measure_wf.
+induction a; apply Acc_intro; intros.
+contradict H.
+apply lt_n_0.
+inversion_clear H.
+apply IHa.
+apply (Acc_inv IHa).
+unfold lt.
+exact H0.
+Defined.
+Check CompSpec.
+
+Functional Scheme compOrdScheme := Induction for compOrd Sort Prop.
+
+Lemma compOrd_spec : forall p q, CompSpec eq LT p q (compOrd p q).
+intros; functional induction (compOrd p q) using compOrdScheme; intros.
+unfold compOrd_func.
 
 Theorem LinearOrder : forall r q, r < q \/ r = q \/ q < r. 
 Proof.
