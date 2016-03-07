@@ -9,40 +9,17 @@ Inductive ord :=
 Notation "0" := (Zero).
 Notation "f $ r" := (Stroke r f) (at level 80).
 
-Section chain.
-  Variable A : Type.
-  Variable f : A -> A.
-  Variable start : A.
-  
-Fixpoint chain (n : nat) : A :=
-  match n with
-    | O => start
-    | S n' => f (chain n')
-  end
-.
-End chain.
+Inductive LT : forall (r q : ord), Prop :=
+| succLT  : forall r q f  , r <= q                   -> r  < (f $ q)
+| monoLT  : forall r q f  , r <  q                   -> (f $ r) < (f $ q) 
+| limitLT : forall r q f g, f <  g  ->  r < (g $ q)  -> (f $ r) < (g $ q)
 
-Arguments chain {A} f start n.
+where "r < q"  := (LT r q) 
+and   "r <= q" := ((r = q) \/ (r < q)).
 
-Inductive LT : forall (n m : ord), Prop :=
-| succLT : forall r f, r < (f $ r)
-| succTransLT : forall q r f : ord, q < r -> q < (f $ r)
-| limitLT : forall g f r : ord, f < g -> forall n, (chain (fun o => f $ o) r n) < (g $ r)
-where "a < b" := (LT a b).
-
-Notation "a <= b" := (a = b \/ LT a b).
-
-Arguments succLT {r} {f}.
-Arguments succTransLT {q} {r} {f} p.
-Arguments limitLT {g} {f} {r} p {n}.
-
-Notation "\$ f" := (fun o => f $ o) (at level 50).
-
-Theorem chain_0 : forall f n r, chain (\$ f) r n = 0 -> r = 0 /\ n = O.
-Proof.
-  induction n; simpl; intros; [split ; auto | idtac].
-  contradict H; discriminate.
-Qed.
+Arguments succLT  {r} {q} {f} p.
+Arguments monoLT  {r} {q} {f} p.
+Arguments limitLT {r} {q} {f} {g} f_lt_g r_lt_gq.
 
 Lemma succ_neq : forall r f, r <> (f $ r).
 Proof.
@@ -52,63 +29,8 @@ Proof.
   exact p.
 Qed.
 
-Fixpoint r_hight o : nat :=
-  match o with
-    | 0 => O
-    | (_f $ r) => S (r_hight r)
-  end
-.
-
 Require Import Omega.
 Require Import Coq.Arith.Lt Coq.Arith.Plus Coq.Arith.Le.
-
-Section chain_f_inj.
-
-Let nat_nk_ind :
-  forall (P : nat -> nat -> Prop),
-    (forall k n, P n (k + n) -> k = O) ->
-    forall m n, (P n m -> P m n -> n = m).
-Proof.
-  intros.
-  assert (exists k, n = k + m \/ m = k + n).
-  clear.
-  induction m.
-  exists n; left; induction n; simpl; try rewrite <- IHn; reflexivity.
-  destruct IHm as [ k [ IH | IH ] ]; rewrite IH; clear IH; destruct k; simpl;
-  try (exists 1; right; simpl; reflexivity).
-  exists k; left; omega.
-  exists (2 + k); right; omega.
-
-  destruct H2 as [k H2]; destruct H2;
-  [ (rewrite H2 in H1; apply H in H1; rewrite H1 in H2)
-  | (rewrite H2 in H0; apply H in H0; rewrite H0 in H2)
-  ] ; rewrite H2; simpl; auto.
-Qed.
-  
-  Variable f r : ord.
-  Let F n := chain (\$ f) r n.
-  Let P n m := F n = F m.
-
-Theorem chain_f_inj : forall n m, P n m -> n = m.
-Proof.
- intros.
- apply (nat_nk_ind P); auto; unfold P; unfold F.
- clear H F P n.
- destruct k; simpl; intros; auto.
- assert ((r_hight (chain (\$ f) r n) < r_hight (f $ chain (\$ f) r (k + n)))%nat).
- clear; induction k; simpl.
- unfold lt; eauto.
- apply lt_trans with (m := r_hight (f $ chain (\$ f) r (k + n))).
- apply IHk.
- eauto.
- rewrite H in H0.
- contradict H0.
- apply lt_irrefl.
- symmetry.
- apply H.
-Qed.
-
-End chain_f_inj.
 
 Section Linear.
 
@@ -188,33 +110,27 @@ Program Fixpoint compOrd (q p : ord) {measure (hight q + hight p)}
     end
 .
 
-Lemma ord_lt_0_o : forall o, o <> 0 -> 0 < o.
+Lemma le_0_ord : forall r, 0 <= r.
 Proof.
-intros; induction o.
-destruct H; reflexivity.
-destruct o1.
-apply succLT.
-apply succTransLT.
-apply IHo1.
-discriminate.
+intros; induction r; [left | right ; apply succLT]; auto.
+Qed.
+
+Lemma lt_0_ord : forall r : ord, (0 <> r) -> 0 < r.
+Proof.
+intros.
+assert (le_r : 0 <= r) by apply le_0_ord; destruct le_r; [contradict H | idtac]; auto.
 Qed.
 
 Next Obligation.
 Proof.
-unfold CompSpec; apply CompLt.
-apply ord_lt_0_o.
-destruct p.
-contradict H.
-split; auto.
-discriminate.
+unfold CompSpec; apply CompLt; apply lt_0_ord; contradict H; split; auto.
 Qed.
 
 Next Obligation.
 Proof.
 apply CompGt.
-apply ord_lt_0_o.
-contradict H0.
-split; auto.
+apply lt_0_ord.
+contradict H0; split; auto.
 Qed.
 
 Next Obligation.
@@ -254,14 +170,56 @@ induction C.
 clear obligation_5 Heq_anonymous.
 rewrite <- H in compOrd.
 clear fp H.
-induction p; constructor; try (rewrite H; reflexivity).
-apply succMonoLT.
+induction p; constructor; try rewrite H; try apply succMonoLT; auto;
+constructor 2; auto.
 Qed.
 
 Next Obligation.
 Proof.
 clear.
-apply plus_le_lt_compat; [apply le_refl | apply hight_lt_r].
+apply plus_lt_le_compat. 
+apply hight_lt_r.
+constructor 1; auto.
+Qed.
+
+Next Obligation.
+Proof.
+assert (fq < fp).
+set (obl := compOrd_func_obligation_4 (fq $ rq) (fp $ rp) compOrd _ _ _ _ eq_refl eq_refl)
+ in *.
+set (C := compOrd fq fp obl) in *.
+destruct C; simpl in *; induction c; try discriminate; auto.
+
+set (obl := compOrd_func_obligation_7 _ _ compOrd rq fq rp fp eq_refl eq_refl Heq_anonymous).
+set (C := compOrd rq (fp $ rp) obl).
+induction C.
+clear obl Heq_anonymous.
+simpl.
+induction p; simpl; constructor.
+rewrite <- H0; apply succLT; left; auto.
+apply limitLT; assumption.
+apply succLT; right; assumption.
+Qed.
+
+Next Obligation.
+Proof.
+apply plus_lt_compat_l.
+apply hight_lt_r.
+Qed.
+
+Next Obligation.
+Proof.
+set (obl := compOrd_func_obligation_4 _ _ compOrd rq fq rp fp eq_refl eq_refl) in *.
+set (C := compOrd fq fp obl) in *.
+set (obl2 := compOrd_func_obligation_9 _ _ compOrd rq fq rp fp eq_refl eq_refl Heq_anonymous).
+set (C2 := compOrd (fq $ rq) rp obl2) in *.
+induction C2. clear obl2.
+induction C; simpl in *. clear compOrd obl.
+induction p0; inversion_clear Heq_anonymous.
+induction p; simpl; constructor.
+rewrite H0; apply succLT; auto.
+apply succLT; auto.
+apply limitLT; auto.
 Qed.
 
 Next Obligation.
@@ -269,126 +227,61 @@ Proof.
 split; intros; clear; intro H; destruct H as [H _]; discriminate H.
 Qed.
 
-Next Obligation.
-Proof.
-apply measure_wf.
-induction a; apply Acc_intro; intros.
-contradict H.
-apply lt_n_0.
-inversion_clear H.
-apply IHa.
-apply (Acc_inv IHa).
-unfold lt.
-exact H0.
-Defined.
-Check CompSpec.
-
 Functional Scheme compOrdScheme := Induction for compOrd Sort Prop.
-
-Lemma compOrd_spec : forall p q, CompSpec eq LT p q (compOrd p q).
-intros; functional induction (compOrd p q) using compOrdScheme; intros.
-unfold compOrd_func.
 
 Theorem LinearOrder : forall r q, r < q \/ r = q \/ q < r. 
 Proof.
+intros.
+induction (compOrd r q).
+induction p; intuition.
 Qed.
 
 End Linear.
 
 Section ind.
 
-  Lemma Z_le : forall r, 0 <= r.
-    induction r.
-    left; reflexivity.
-    right; destruct IHr1.
-    rewrite <- H; apply succLT.
-    apply succTransLT; assumption.
-  Qed.
-  
-  Lemma rising : forall f g, f < (f $ g).
-  Proof.
-    induction f; intro g.
-    assert (0 <= (0 $ g)) by apply Z_le.
-    destruct H;
-      [ contradict H; discriminate
-      | assumption
-      ].
-    assert(H : chain (\$ f) 
-  Qed.
+Notation "'Stream'" := (nat -> ord).
 
-  Lemma no_smaller_step : forall r m, m < (0 $ r) <-> m <= r.
-  Proof.
-    intros.
-    split; intro H.
 
-    inversion_clear H.
-    left; auto.
-    right; auto.
+Definition Decreasing (str : Stream) : Prop := forall n, str(S n) < str(n).
 
-    inversion H0.
+Lemma no_decreasing_stream : forall str, ~ Decreasing str.
+Proof.
+intros str.
+intros H.
+unfold Decreasing in H.
+set (x := str O).
+assert (
+Qed.
 
-    destruct H.
-    rewrite H; apply succLT.
-    
-    apply succTransLT; assumption.
-  Qed.
+Inductive Proper : ord -> Prop :=
+ MkProper : forall q, (forall r, r < q -> Proper r) -> Proper q
+.
 
-  Require Import Coq.Setoids.Setoid. 
-  
+Lemma all_proper : forall q, Proper q.
+Proof.
+induction q.
+apply MkProper; intros.
+inversion H.
 
-  Lemma chain_induction : forall f start (P : ord -> Prop),
-                            (forall r, r <= start -> P r)
-                            -> (forall x, (forall r, r < x -> P r) -> P x)
-                            -> forall n, (forall r, r <= (chain (\$ f) start n) -> P r).
-  Proof.
-    intros f start P H_start H_next.
-    induction f; induction n; simpl; try assumption.
-    intro.
-
-    assert (H_next_ : forall x, (forall r, r < x -> P r) -> (forall r, r <= x -> P r)) by
-        (clear n IHn r; intros x r_lt_x r r_le_x; destruct r_le_x; [rewrite H; apply H_next | apply r_lt_x]; assumption).
-
-    clear H_next.
-    apply H_next_.
-    clear r.
-    intros r r_lt_0Chain.
-    apply IHn.
-    
-    clear H0; apply H1; clear H1 r.
-    intros r r_lt_x.
-    apply IHn.
-    rewrite <- no_smaller_step.
-    assumption.
-
-    
-  Qed.
-  
-Let Ind x := forall P : ord -> Prop, (forall q, (forall r, r < q -> P r) -> P q) -> P x.
+apply MkProper; intros; inversion H.
+clear r0 H1 q f H0 H3.
+destruct H2.
+rewrite H0 in *; clear r H0; assumption.
+inversion_clear IHq1; apply H1; assumption.
+Qed.
   
 Theorem transfinite_induction :
-  forall P,
+  forall (P : ord -> Prop),
     (forall q, (forall r, r < q -> P r) -> P q) ->
     forall q, P q.
 Proof.
-  assert (forall q,  Ind q).
-  unfold Ind; clear.  
-  intros.
-  apply H.
-  induction q; intros r H_lt; inversion H_lt.
-  rewrite H2 in H_lt; clear r H0 H2 f H3.
-  apply H.
-  assumption.
-  apply IHq1; assumption.
-  rewrite H0 in H1;  clear g H3 r0 H0.
-  rewrite <- H1 in H_lt; clear r H1.
-  induction n; simpl; simpl in H_lt.
-  clear f H2; apply H; apply IHq1.
-  
-  Qed.
+
+Qed.
   
  
   
-Theorem LE_antirefl : forall p q, p < q -> p <> q.
+Theorem LT_antirefl : forall p q, p < q -> p <> q.
 Proof.
   Check LT_ind.
   intros p q H.
