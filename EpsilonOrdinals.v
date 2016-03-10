@@ -56,7 +56,7 @@ Lemma max_le_l : (forall n m, n <= max n m )%nat.
 Proof.
 induction n.
 apply le_0_n.
-destruct m; simpl; apply le_n_S; [apply le_refl | apply IHn].
+destruct m; simpl; apply le_n_S; [app0ly le_refl | apply IHn].
 Qed.
 
 Lemma max_comm : (forall n m, max m n = max n m)%nat.
@@ -240,18 +240,24 @@ End Linear.
 
 Section ind.
 
-Notation "'Stream'" := (nat -> ord).
+CoInductive Stream A := 
+| cons : A -> Stream A -> Stream A
+.
 
+Arguments cons {A} a s.
 
-Definition Decreasing (str : Stream) : Prop := forall n, str(S n) < str(n).
+CoInductive Decending : Stream ord -> Prop :=
+| decCons : forall a b s, b < a -> Decending (cons a s) -> Decending (cons b (cons a s))
+.  
 
-Lemma no_decreasing_stream : forall str, ~ Decreasing str.
-Proof.
-intros str.
-intros H.
-unfold Decreasing in H.
-set (x := str O).
-assert (
+Lemma no_infinite_decent : forall s, ~ Decending s.
+assert (forall p q s, q < p -> ~ Decending (cons p s)).
+induction p; intros; inversion H.
+clear r q0 f H1 H0 H3.
+destruct H2.
+rewrite H0 in *.
+clear H.
+
 Qed.
 
 Inductive Proper : ord -> Prop :=
