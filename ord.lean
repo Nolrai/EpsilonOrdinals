@@ -64,8 +64,6 @@ record has_involution [class] (A : Type) extends (has_swap A) :=
 
 abbreviation σ {{A}} [H : has_swap A] x := @has_swap.swap A H x
 
-print σ
-
 inductive ineq : Type :=
   | LessThan
   | GreaterThan
@@ -154,39 +152,36 @@ inductive is_child : ord -> ord -> Prop :=
   | through_f : forall {f r}, is_child f (f∥r)
   | through_r : forall {f r}, is_child f (f∥r)
 
-inductive trans_completion' {A : Type} (R : A -> A -> Prop) : A -> A -> Type :=
+inductive trans_completion {A : Type} (R : A -> A -> Prop) : A -> A -> Prop :=
   | single : forall {a b}, 
-    R a b -> trans_completion' R a b
+    R a b -> trans_completion R a b
   | next : forall {a b} c, 
-    R a b -> trans_completion' R b c -> trans_completion' R a c
+    R a b -> trans_completion R b c -> trans_completion R a c
 
-abbreviation TR' {A} R := @trans_completion' A R
+abbreviation TR {A} R := @trans_completion A R
 
 infix `~>`:50 := is_child
 
-structure to_prop : Type -> Prop :=
-  | inhabited : ∀ {A} (x : A), to_prop A
-
-abbreviation TR {A} R := λ a b : A, to_prop (TR' R a b)
-
 open eq.ops well_founded decidable prod
 
-namespace trans_completion'
+namespace trans_completion
 section One
   parameter A : Type
   parameter R : A -> A -> Prop
 
-lemma trans_valid' : forall {a b}, TR' R a b -> ∃ c, R c b
-  | a b (single p) := exists.intro a p
-  | a b (next _ p pp) := trans_valid' pp
-
-lemma trans_valid : forall {a b}, TR R a b -> ∃ c, R c b
-  | a b {|to_prop, inhabited := tr |} := trans_valid' tr 
+lemma trans_valid : forall {a b}, 
+    TR R a b -> ∃ c, R c b :=
+  begin
+    intros a b H,
+    induction H,
+    {existsi a, assumption},
+    {assumption},
+  end
 
 end One
-end trans_completion'
+end trans_completion
 
-open trans_completion'
+open trans_completion
 
 lemma zero_has_no_children : ∀ x, ¬ (x ~> 0) :=
   begin
@@ -196,9 +191,10 @@ lemma zero_has_no_children : ∀ x, ¬ (x ~> 0) :=
   end
 
 lemma Zero_is_zero : Zero = 0 := rfl
+reveal Zero_is_zero
 open ord
 
-theorem all_reached : well_founded TR :=
+theorem all_reached : well_founded (TR is_child) :=
   well_founded.intro
     proof
       begin
@@ -207,14 +203,25 @@ theorem all_reached : well_founded TR :=
         intros,
         induction a,
         cases a_1,
-        exfalso,
-        assert H : ∃ z, z ~> 0,
-        apply (trans_valid ord  x),
+        {
+            exfalso,
+            assert H : ∃ z, z ~> 0,
+            {existsi y, rewrite Zero_is_zero at a_2, assumption},
+            cases H, apply zero_has_no_children, assumption
+        },
+        {
+            exfalso,
+            assert H : ∃ z, z ~> 0,
+            {apply trans_valid, apply a_3},
+            cases H,
+            apply zero_has_no_children,
+            apply a_1
+        },
         now
       end
     qed
-  
-end
 
 end ord
+
+end
 
