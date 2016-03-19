@@ -1,3 +1,4 @@
+
 inductive ord : Type :=
 | Zero : ord
 | Stroke : ord -> ord -> ord
@@ -150,7 +151,7 @@ definition compOrd' : ((ord×ord)->comp)->(ord×ord)->comp
 
 inductive is_child : ord -> ord -> Prop :=
   | through_f : forall {f r}, is_child f (f∥r)
-  | through_r : forall {f r}, is_child f (f∥r)
+  | through_r : forall {f r}, is_child r (f∥r)
 
 inductive trans_completion {A : Type} (R : A -> A -> Prop) : A -> A -> Prop :=
   | single : forall {a b}, 
@@ -194,30 +195,79 @@ lemma Zero_is_zero : Zero = 0 := rfl
 reveal Zero_is_zero
 open ord
 
+abbreviation is_descendant := TR is_child
+
+infix `~~>`:50 := is_descendant 
+
+lemma is_desc_split' : forall y x, 
+    y ~~> x
+    -> forall f r
+    , f∥r = x
+    ->  (   (y = f ∨ y = r) 
+            ∨ ((y ~~> f) ∨ (y ~~> r))
+        )
+  :=
+    begin
+        intros y x H,
+        induction H; all_goals intros f r HB,
+        {left, subst b, cases a_1, {left, reflexivity}, {right, reflexivity}},
+        {  right, 
+            assert H : (b = f ∨ b = r) ∨ b ~~> f ∨ b ~~> r,
+                {apply v_0, assumption},
+            clear a_2 v_0 HB c,
+            cases H with H H,
+            { cases H with H H
+            , all_goals subst b
+            , {left, apply single, assumption}
+            , {right, apply single, assumption}
+            },
+            {cases H with H 
+            , {left, apply next, repeat assumption}
+            , {right, apply next, repeat assumption}
+            },
+        },
+    end
+    
+definition is_desc_split {y} {f} {r} H := is_desc_split' y (f∥r) H f r rfl  
+  
+
 theorem all_reached : well_founded (TR is_child) :=
   well_founded.intro
     proof
       begin
-        intro,
-        constructor,
-        intros,
-        induction a,
-        cases a_1,
+        intro a,
+        induction a with f r,
+        all_goals split,
         {
-            exfalso,
-            assert H : ∃ z, z ~> 0,
-            {existsi y, rewrite Zero_is_zero at a_2, assumption},
-            cases H, apply zero_has_no_children, assumption
-        },
-        {
-            exfalso,
-            assert H : ∃ z, z ~> 0,
-            {apply trans_valid, apply a_3},
+            intros y H,
             cases H,
-            apply zero_has_no_children,
-            apply a_1
+            {
+                exfalso,
+                assert H : ∃ z, z ~> 0,
+                {existsi y, rewrite Zero_is_zero at a_1, assumption},
+                cases H, apply zero_has_no_children, assumption
+            },
+            {
+                exfalso,
+                assert H : ∃ z, z ~> 0,
+                {apply trans_valid, apply a_2},
+                cases H,
+                apply zero_has_no_children,
+                apply a_3
+            },
         },
-        now
+        {
+            intro y YH,
+            assert H : (y = f ∨ y = r) ∨ y ~~> f ∨ y ~~> r,
+            {apply is_desc_split, assumption},
+            cases H with H H,
+            {all_goals cases H with H H, all_goals (subst y; assumption) },
+            {
+                all_goals cases H with H H, 
+                {cases v_0 with _ HH, apply HH, assumption},
+                {cases v_1 with _ HH, apply HH, assumption},
+            },
+        }
       end
     qed
 
