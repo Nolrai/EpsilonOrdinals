@@ -135,8 +135,8 @@ namespace ord
 open comp
 open ineq
 
-definition compOrd' : ((ord×ord)->comp)->(ord×ord)->comp
-    | f (p, q) := 
+definition compOrd' : Π x : (ord×ord), (Π p : (ord×ord), p ⟪ x ->comp)->comp
+    | (p, q) f := 
       match (p,q) with
       | (0,0) := EQ
       | (0,_) := Ineq LT
@@ -263,13 +263,19 @@ theorem all_reached : well_founded (TR is_child) :=
             cases H with H H,
             {all_goals cases H with H H, all_goals (subst y; assumption) },
             {
-                all_goals cases H with H H, 
+                all_goals cases H with H H,
                 {cases v_0 with _ HH, apply HH, assumption},
                 {cases v_1 with _ HH, apply HH, assumption},
             },
         }
       end
     qed
+    
+    protected definition R := rprod (TR is_child) (TR is_child)
+    
+    theorem wfR : well_founded ord.R := rprod.wf all_reached all_reached
+    
+    definition compOrd x y := fix  
 
 end ord
 
