@@ -135,31 +135,19 @@ namespace ord
 open comp
 open ineq
 
-definition compOrd' : Π x : (ord×ord), (Π p : (ord×ord), p ⟪ x ->comp)->comp
-    | (p, q) f := 
-      match (p,q) with
-      | (0,0) := EQ
-      | (0,_) := Ineq LT
-      | (_,0) := Ineq GT
-      | ((fp∥rp),(fq∥rq)) := 
-        match f (fp,fq) with
-        | EQ := f (rp,rq)
-        | LT := nudge GT (f (rp,q))
-        | GT := nudge LT (f (p,rq))
-        end
-      end
-
 inductive is_child : ord -> ord -> Prop :=
   | through_f : forall {f r}, is_child f (f∥r)
   | through_r : forall {f r}, is_child r (f∥r)
 
-inductive trans_completion {A : Type} (R : A -> A -> Prop) : A -> A -> Prop :=
-  | single : forall {a b}, 
-    R a b -> trans_completion R a b
+inductive kleen_star {A : Type} (R : A -> A -> Prop) : A -> A -> Prop :=
+  | refl : forall {a},
+    kleen_star R a a
   | next : forall {a b} c, 
-    R a b -> trans_completion R b c -> trans_completion R a c
+    R a b -> kleen_star R b c -> kleen_star R a c
 
-abbreviation TR {A} R := @trans_completion A R
+attribute kleen_star.refl [refl]
+
+notation R `⋆` := kleen_star R
 
 infix `~>`:50 := is_child
 
@@ -169,15 +157,6 @@ namespace trans_completion
 section One
   parameter A : Type
   parameter R : A -> A -> Prop
-
-lemma trans_valid : forall {a b}, 
-    TR R a b -> ∃ c, R c b :=
-  begin
-    intros a b H,
-    induction H,
-    {existsi a, assumption},
-    {assumption},
-  end
 
 end One
 end trans_completion
@@ -195,41 +174,53 @@ lemma Zero_is_zero : Zero = 0 := rfl
 reveal Zero_is_zero
 open ord
 
-abbreviation is_descendant := TR is_child
-
-infix `~~>`:50 := is_descendant 
+infix `~~>`:50 := is_child⋆
 
 lemma is_desc_split' : forall y x, 
     y ~~> x
-    -> forall f r
-    , f∥r = x
-    ->  (   (y = f ∨ y = r) 
-            ∨ ((y ~~> f) ∨ (y ~~> r))
+    -> exists f r,
+        (   y = x 
+            ∨ (x = (f∥r) ∧ ((y ~~> f) ∨ (y ~~> r)))
         )
   :=
     begin
         intros y x H,
-        induction H; all_goals intros f r HB,
-        {left, subst b, cases a_1, {left, reflexivity}, {right, reflexivity}},
-        {  right, 
-            assert H : (b = f ∨ b = r) ∨ b ~~> f ∨ b ~~> r,
-                {apply v_0, assumption},
-            clear a_2 v_0 HB c,
-            cases H with H H,
-            { cases H with H H
-            , all_goals subst b
-            , {left, apply single, assumption}
-            , {right, apply single, assumption}
+        induction H,
+        {existsi 0, existsi 0, left, reflexivity},
+        {
+            induction v_0 with f v_1, induction v_1 with r v_2,
+            cases v_2,
+            {
+                clear f r, 
+                induction a_1 with f r, 
+                    all_goals existsi f, 
+                    all_goals existsi r,
+                    all_goals right,
+                    all_goals split,
+                    all_goals try (symmetry; assumption),
+                    {left, reflexivity},
+                    {right, reflexivity}
             },
-            {cases H with H 
-            , {left, apply next, repeat assumption}
-            , {right, apply next, repeat assumption}
+            {
+                existsi f, existsi r, 
+                right, 
+                cases a_3 with H HH,
+                split, {assumption}, 
+                cases HH with HH, 
+                {left, apply kleen_star.next, repeat assumption},
+                {right, apply kleen_star.next, repeat assumption},
             },
         },
     end
     
-definition is_desc_split {y} {f} {r} H := is_desc_split' y (f∥r) H f r rfl  
-  
+definition is_desc_split {y} {f} {r} 
+    : y ~~> (f∥r) -> y = (f∥r) ∨ ((y ~~> f) ∨ (y ~~> r)) :=
+    begin
+        intros y f r H,
+        assert (∃ f' r', (f∥r) = (f'\||r') ∧ (f∥r) ∨ ((y ~~> f) ∨ (y ~~> r))
+    end
+
+check is_desc_split
 
 theorem all_reached : well_founded (TR is_child) :=
   well_founded.intro
@@ -275,7 +266,32 @@ theorem all_reached : well_founded (TR is_child) :=
     
     theorem wfR : well_founded ord.R := rprod.wf all_reached all_reached
     
-    definition compOrd x y := fix  
+    local infix `⟪`:50 := ord.R
+    
+    private lemma lemma1
+        : Π fp rp fq rq, (rp, rq)⟪(fp∥rp, fq∥rq) :=
+        take fp rp fq rq : ord, 
+        have Hp : rp ⟪ (fp∥rp), from
+            TR.single is_child.through_r,
+        qed
+    
+    definition compOrd' : 
+    Π x : (ord×ord), 
+    (Π p : (ord×ord), p ⟪ x ->comp) ->
+    comp
+    | (0,0) _ := EQ
+    | (0,_) _ := Ineq LT
+    | (_,0) _ := Ineq GT
+    | ((fp∥rp),(fq∥rq)) f := 
+        match f (fp,fq) lemma1 with
+        | EQ := f (rp,rq) _
+        | LT := nudge GT (f (rp,(fq∥rq)) _)
+        | GT := nudge LT (f ((fp∥rp),rq) _)
+        end
+    end
+      
+    
+    definition compOrd x y := fix compOrd' (x,y)
 
 end ord
 
